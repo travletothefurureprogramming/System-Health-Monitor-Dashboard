@@ -3,10 +3,20 @@ import psutil
 from rich.live import Live
 from rich.table import Table
 import wmi
+import datetime
+from plyer import notification
 import os
-import sys
-import ctypes
 
+DB_FILE = "logs.txt"
+
+if not os.path.exists(DB_FILE) or os.path.getsize(DB_FILE) == 0:
+        with open(DB_FILE, "w", encoding="utf-8") as f:
+            pass
+
+
+timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+with open(DB_FILE, 'a') as f:
+    f.write(f"[{timestamp}] The system has started")
 
 last_sent, last_recv = psutil.net_io_counters()[:2]
 last_time = time.time()
@@ -37,6 +47,16 @@ def get_ram():
 def get_disk_usage():
     return psutil.disk_usage("C:").percent
 
+def get_boot_time():
+    boot = psutil.boot_time()
+    uptime = datetime.datetime.now() - datetime.datetime.fromtimestamp(boot)
+    return uptime
+
+def send_notification(title,message):
+    notification.notify(
+        title=title,
+        message=message
+    )
 
 def get_network_speed():
     global last_sent, last_recv, last_time
@@ -79,16 +99,34 @@ def generate_table() -> Table:
     table.add_column("Disk Usage", justify="center")
     table.add_column("Network (Sent/sec)", justify="center")
     table.add_column("Network (Recv/sec)", justify="center")
+    table.add_column("UpTime", justify="center")
+
 
     cpu = get_cpu()
     cpu_temp = get_cpu_temperature()
     ram = get_ram()
     disk = get_disk_usage()
     net_sent, net_recv = get_network_speed()
+    uptime = get_boot_time()
 
     cpu_color = "[red]" if cpu > 80 else "[yellow]" if cpu > 50 else "[green]"
     ram_color = "[red]" if ram > 80 else "[yellow]" if ram > 50 else "[green]"
     disk_color = "[red]" if disk > 90 else "[yellow]" if disk > 70 else "[green]"
+
+    if cpu > 80:
+        send_notification("CPU WARNING",f"Heavy CPU Usage. The CPU usage is {cpu}%")
+
+        with open(DB_FILE,"a") as f:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{timestamp}] Heavy CPU Usage. The CPU usage is {cpu}%")
+
+    if ram > 80:
+        send_notification("RAM WARNING",f"Heavy RAM Usage. The RAM usage is {ram}%")
+        with open(DB_FILE,"a") as f:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{timestamp}] Heavy RAM Usage. The RAM usage is {ram}%")
+
+
 
     net_sent_color = (
         "[red]" if net_sent > 1000000 else "[yellow]" if net_sent > 100000 else "[green]"
@@ -106,6 +144,7 @@ def generate_table() -> Table:
      f"{disk_color}{disk:.1f}%",
      f"{net_sent_color}{format_bytes(net_sent)}",
      f"{net_recv_color}{format_bytes(net_recv)}",
+     f"{uptime}"
  )
 
     return table
